@@ -1,0 +1,14 @@
+SmartDocs.API/bin
+SmartDocs.API/obj
+SmartDocs.Domain/bin
+SmartDocs.Domain/obj
+SmartDocs.Application/bin
+SmartDocs.Application/obj
+SmartDocs.Infrastructure/bin
+SmartDocs.Infrastructure/obj
+SmartDocs.Functions/bin
+SmartDocs.Functions/obj
+SmartDocs.Webjob/bin
+SmartDocs.Webjob/obj
+azurite-data/__blobstorage__
+azurite-data/__queuestorage__
