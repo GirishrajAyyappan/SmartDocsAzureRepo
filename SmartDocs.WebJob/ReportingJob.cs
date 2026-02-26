@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SmartDocs.Application.Interfaces;
-using SmartDocs.Domain.Enums;
 
 public class ReportingJob : BackgroundService
 {

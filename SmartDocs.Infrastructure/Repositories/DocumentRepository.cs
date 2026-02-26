@@ -1,74 +1,112 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Configuration;
 using SmartDocs.Application.Interfaces;
 using SmartDocs.Domain.Entities;
 using SmartDocs.Domain.Enums;
-using SmartDocs.Infrastructure.Persistence;
+using CosmosContainer = Microsoft.Azure.Cosmos.Container;
 
 namespace SmartDocs.Infrastructure.Repositories;
 
 public class DocumentRepository : IDocumentRepository
 {
-    private readonly AppDbContext _context;
+    private readonly CosmosContainer _container;
 
-    public DocumentRepository(AppDbContext context)
+    public DocumentRepository(IConfiguration configuration)
     {
-        _context = context;
+        var connectionString = configuration["CosmosDb:ConnectionString"];
+        var databaseName = configuration["CosmosDb:DatabaseName"];
+        var containerName = configuration["CosmosDb:ContainerName"];
+
+        var client = new CosmosClient(connectionString);
+        _container = client.GetContainer(databaseName, containerName);
     }
 
     public async Task AddAsync(Document document, CancellationToken cancellationToken)
     {
-        await _context.Documents.AddAsync(document, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _container.CreateItemAsync(document, new PartitionKey(document.Id), cancellationToken: cancellationToken);
     }
 
     public async Task UpdateAsync(Document document, CancellationToken cancellationToken)
     {
-        _context.Documents.Update(document);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _container.UpsertItemAsync(document, new PartitionKey(document.Id), cancellationToken: cancellationToken);
     }
 
     public async Task<Document?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _context.Documents
-            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
+        try
+        {
+            var response = await _container.ReadItemAsync<Document>(
+                id.ToString(),
+                new PartitionKey(id.ToString()),
+                cancellationToken: cancellationToken);
+
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
     }
 
     public async Task<List<Document>> GetCompletedAsync(CancellationToken cancellationToken)
     {
-        return await _context.Documents
-            .Where(d => d.Status == DocumentStatus.Completed)
-            .ToListAsync(cancellationToken);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.Status = @status")
+            .WithParameter("@status", DocumentStatus.Completed.ToString());
+
+        return await ExecuteQueryAsync(query, cancellationToken);
     }
 
     public async Task<List<Document>> GetPendingAsync(CancellationToken cancellationToken)
     {
-        return await _context.Documents
-            .Where(d => d.Status == DocumentStatus.Uploaded)
-            .ToListAsync(cancellationToken);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.Status = @status")
+            .WithParameter("@status", DocumentStatus.Uploaded.ToString());
+
+        return await ExecuteQueryAsync(query, cancellationToken);
     }
 
-public async Task<List<Document>> GetAndMarkPendingAsync(
-    int batchSize,
-    CancellationToken cancellationToken)
-{
-    var documents = await _context.Documents
-        .Where(d => d.Status == DocumentStatus.Uploaded)
-        .OrderBy(d => d.Id)
-        .Take(batchSize)
-        .ToListAsync(cancellationToken);
-
-    if (!documents.Any())
-        return documents;
-
-    // 🔥 Immediately mark as Processing
-    foreach (var document in documents)
+    public async Task<List<Document>> GetAndMarkPendingAsync(
+        int batchSize,
+        CancellationToken cancellationToken)
     {
-        document.MarkProcessing();
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.Status = @status ORDER BY c.id")
+            .WithParameter("@status", DocumentStatus.Uploaded.ToString());
+
+        var documents = new List<Document>();
+        var iterator = _container.GetItemQueryIterator<Document>(query);
+
+        while (iterator.HasMoreResults && documents.Count < batchSize)
+        {
+            var response = await iterator.ReadNextAsync(cancellationToken);
+            documents.AddRange(response);
+        }
+
+        documents = documents.Take(batchSize).ToList();
+
+        foreach (var document in documents)
+        {
+            document.MarkProcessing();
+            await _container.UpsertItemAsync(document, new PartitionKey(document.Id), cancellationToken: cancellationToken);
+        }
+
+        return documents;
     }
 
-    // 🔥 Persist the Processing state
-    await _context.SaveChangesAsync(cancellationToken);
+    private async Task<List<Document>> ExecuteQueryAsync(
+        QueryDefinition query,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<Document>();
+        var iterator = _container.GetItemQueryIterator<Document>(query);
 
-    return documents;
-}
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(cancellationToken);
+            results.AddRange(response);
+        }
+
+        return results;
+    }
 }

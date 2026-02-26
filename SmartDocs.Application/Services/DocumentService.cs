@@ -1,8 +1,8 @@
 using SmartDocs.Application.Interfaces;
 using SmartDocs.Domain.Entities;
+using SmartDocs.Domain.Enums;
 
 namespace SmartDocs.Application.Services;
-
 public class DocumentService
 {
     private readonly IDocumentRepository _repository;
@@ -19,40 +19,44 @@ public class DocumentService
         _queueService = queueService;
     }
 
-    public async Task<Guid> UploadDocumentAsync(
-        Stream fileStream,
-        string fileName,
-        string contentType,
-        CancellationToken cancellationToken = default)
+public async Task<Guid> UploadDocumentAsync(
+    Stream fileStream,
+    string fileName,
+    string contentType,
+    CancellationToken cancellationToken = default)
+{
+    var id = Guid.NewGuid(); 
+
+    var blobName = await _blobStorageService.UploadAsync(
+        fileStream,
+        fileName,
+        contentType,
+        cancellationToken);
+
+    var document = new Document
     {
-        var documentId = Guid.NewGuid();
+        Id = id.ToString(),
+        FileName = fileName,
+        BlobName = blobName,
+        Status = DocumentStatus.Uploaded
+    };
 
-        var blobName = await _blobStorageService.UploadAsync(
-            fileStream,
-            fileName,
-            contentType,
-            cancellationToken);
+    await _repository.AddAsync(document, cancellationToken);
 
-        var document = new Document(documentId, fileName, blobName);
+    var message = new DocumentProcessingMessage
+    {
+        DocumentId = id,
+        BlobName = blobName,
+        FileName = fileName
+    };
 
-        // ✅ Pass cancellationToken
-        await _repository.AddAsync(document, cancellationToken);
+    await _queueService.EnqueueAsync(
+        StorageConstants.ProcessingQueue,
+        message,
+        cancellationToken);
 
-        var message = new DocumentProcessingMessage
-        {
-            DocumentId = documentId,
-            BlobName = blobName,
-            FileName = fileName
-        };
-
-        await _queueService.EnqueueAsync(
-            StorageConstants.ProcessingQueue,
-            message,
-            cancellationToken);
-
-        return documentId;
-    }
-
+    return id;
+}
     public async Task<Document?> GetDocumentAsync(
         Guid id,
         CancellationToken cancellationToken = default)

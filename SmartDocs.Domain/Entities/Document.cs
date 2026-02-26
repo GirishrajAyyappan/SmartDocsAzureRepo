@@ -1,44 +1,23 @@
 using SmartDocs.Domain.Enums;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace SmartDocs.Domain.Entities;
-
 public class Document
 {
-    public Guid Id { get; private set; }
-    public string FileName { get; private set; }
-    public string BlobName { get; private set; }
-    public DocumentStatus Status { get; private set; }
+    [JsonProperty("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    public Document(Guid id, string fileName, string blobName)
-    {
-        Id = id;
-        FileName = fileName;
-        BlobName = blobName;
-        Status = DocumentStatus.Uploaded;
-    }
+    public string FileName { get; set; } = default!;
 
-   public void MarkProcessing()
-{
-    if (Status != DocumentStatus.Uploaded)
-        throw new InvalidOperationException("Only uploaded documents can move to processing.");
+    public string BlobName { get; set; } = default!;
+    
+    [JsonConverter(typeof(StringEnumConverter))]
+    public DocumentStatus Status { get; set; } = DocumentStatus.Uploaded;
 
-    Status = DocumentStatus.Processing;
-}
+    public void MarkProcessing() => Status = DocumentStatus.Processing;
 
-public void MarkCompleted()
-{
-    if (Status != DocumentStatus.Processing)
-        throw new InvalidOperationException("Only processing documents can be completed.");
+    public void MarkCompleted() => Status = DocumentStatus.Completed;
 
-    Status = DocumentStatus.Completed;
-}
-
-public void MarkFailed()
-{
-    if (Status != DocumentStatus.Processing)
-        throw new InvalidOperationException("Only processing documents can fail.");
-
-    Status = DocumentStatus.Failed;
-}
-
+    public void MarkFailed() => Status = DocumentStatus.Failed;
 }

@@ -1,6 +1,8 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using SmartDocs.Application.Interfaces;
+using System.Text.Json;
+using SmartDocs.Functions.Models;
 
 namespace SmartDocs.Functions;
 
@@ -9,25 +11,35 @@ public class DocumentProcessorFunction
     private readonly ILogger<DocumentProcessorFunction> _logger;
     private readonly IDocumentRepository _repository;
 
-   public DocumentProcessorFunction(
-    ILogger<DocumentProcessorFunction> logger,
-    IDocumentRepository repository)
-{
-    _logger = logger;
-    _repository = repository;
-}
+    public DocumentProcessorFunction(
+     ILogger<DocumentProcessorFunction> logger,
+     IDocumentRepository repository)
+    {
+        _logger = logger;
+        _repository = repository;
+    }
 
     [Function("DocumentProcessorFunction")]
     public async Task Run(
-        [QueueTrigger("smartdocs-queue", Connection = "StorageConnection")]
-        string documentId,
-        CancellationToken cancellationToken)
+    [QueueTrigger("queue-smartdocs-dev", Connection = "StorageConnection")]
+    QueueMessage message,
+    CancellationToken cancellationToken)
     {
         try
         {
-            _logger.LogInformation("Received document ID: {DocumentId}", documentId);
+            _logger.LogInformation(
+         "Processing DocumentId: {DocumentId}, Blob: {BlobName}",
+         message.DocumentId,
+         message.BlobName);
 
-            var id = Guid.Parse(documentId);
+
+            if (message == null)
+            {
+                _logger.LogError("Failed to deserialize message");
+                return;
+            }
+
+            var id = Guid.Parse(message.DocumentId);
 
             var document = await _repository.GetByIdAsync(id, cancellationToken);
 
@@ -40,19 +52,17 @@ public class DocumentProcessorFunction
             document.MarkProcessing();
             await _repository.UpdateAsync(document, cancellationToken);
 
-            _logger.LogInformation("Processing document {DocumentId}", documentId);
-
             await Task.Delay(2000, cancellationToken);
 
             document.MarkCompleted();
             await _repository.UpdateAsync(document, cancellationToken);
 
-            _logger.LogInformation("Completed document {DocumentId}", documentId);
+            _logger.LogInformation("Completed document {DocumentId}", message.DocumentId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Processing failed");
-            throw; // important for retry
+            throw;
         }
     }
 }

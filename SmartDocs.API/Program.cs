@@ -1,25 +1,27 @@
-using Microsoft.EntityFrameworkCore;
 using SmartDocs.Application.Interfaces;
 using SmartDocs.Application.Services;
-using SmartDocs.Infrastructure.Persistence;
 using SmartDocs.Infrastructure.Repositories;
 using SmartDocs.Infrastructure.Storage;
 using Azure.Storage.Queues;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --------------------
 // Database
 // --------------------
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.EnableRetryOnFailure()));
+
 // --------------------
 // Infrastructure Layer
 // --------------------
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddSingleton<IBlobStorageService, AzureBlobStorageService>();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters
+            .Add(new JsonStringEnumConverter()));
+            
 builder.Services.AddSingleton(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
