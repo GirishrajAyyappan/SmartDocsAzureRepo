@@ -14,22 +14,22 @@ public class DocumentsController : ControllerBase
         _documentService = documentService;
     }
 
- [HttpPost("upload")]
-public async Task<IActionResult> Upload(IFormFile file)
-{
-    if (file == null || file.Length == 0)
-        return BadRequest("Invalid file.");
+    [HttpPost("upload")]
+    public async Task<IActionResult> Upload(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest("Invalid file.");
 
-    using var stream = file.OpenReadStream();
+        using var stream = file.OpenReadStream();
 
-    var documentId = await _documentService.UploadDocumentAsync(
-        stream,
-        file.FileName,
-        file.ContentType,
-        HttpContext.RequestAborted);
+        var documentId = await _documentService.UploadDocumentAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            HttpContext.RequestAborted);
 
-    return Accepted(new { DocumentId = documentId });
-}
+        return Accepted(new { DocumentId = documentId });
+    }
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(Guid id)
     {
@@ -40,4 +40,11 @@ public async Task<IActionResult> Upload(IFormFile file)
 
         return Ok(document);
     }
+
+    [HttpGet("sanityCheck")]
+    public IActionResult Health()
+    {
+        return Ok("API is running");
+    }
+
 }
