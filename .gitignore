@@ -17,3 +17,5 @@ azurite-data/
 azurite-data/__azurite_db_blob__.json
 azurite-data/__azurite_db_blob__.json
 azurite-data/__azurite_db_queue__.json
+SmartDocs.WebJob/publish/
+.vscode/

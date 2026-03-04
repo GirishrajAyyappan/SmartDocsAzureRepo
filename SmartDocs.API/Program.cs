@@ -8,10 +8,6 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 // --------------------
-// Database
-// --------------------
-
-// --------------------
 // Infrastructure Layer
 // --------------------
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
@@ -50,12 +46,4 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.MapControllers();
-app.MapGet("/env-check", (IConfiguration config) =>
-{
-    return new
-    {
-        AzureStorage = config["AzureStorage:ConnectionString"],
-        Cosmos = config["CosmosDb:ConnectionString"]
-    };
-});
 app.Run();
